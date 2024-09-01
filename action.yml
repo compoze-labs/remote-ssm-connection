@@ -1,0 +1,52 @@
+name: "AWS SSM Port Forwarding with OIDC"
+description: "Sets up AWS credentials using OIDC and starts an SSM port forwarding session"
+author: "larse514"
+inputs:
+  instance-id:
+    description: "The ID of the EC2 instance"
+    required: true
+  host:
+    description: "host to forward to"
+    required: true
+  local-port:
+    description: "The local port to forward to"
+    required: true
+  remote-port:
+    description: "The remote port on the instance"
+    required: true
+  aws-region:
+    description: "The AWS region where the instance is located"
+    required: true
+  role-to-assume:
+    description: "The ARN of the IAM role to assume via OIDC"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure AWS Credentials using OIDC
+      id: aws-creds-oidc
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Start SSM Port Forwarding
+      id: ssm-port-forwarding
+      shell: bash
+      run: |
+        nohup aws ssm start-session --region ${{ inputs.aws-region }} --target ${{ inputs.instance-id }} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters host="${{ inputs.host }},portNumber=${{ inputs.remote-port }},localPortNumber=${{ inputs.local-port }}" > ssm.log 2>&1 &
+      env:
+        AWS_REGION: ${{ inputs.aws-region }}
+
+    - name: Wait for SSM session to establish
+      shell: bash
+      run: sleep 10
+
+permissions:
+  id-token: write
+  contents: read
+
+branding:
+  icon: "server"
+  color: "blue"
